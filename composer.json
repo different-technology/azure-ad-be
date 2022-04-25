@@ -1,0 +1,20 @@
+{
+  "name": "different-technology/azure-ad-be",
+  "type": "typo3-cms-extension",
+  "description": "Azure Active Directory - TYPO3 Backend Login",
+  "homepage": "https://different.technology/",
+  "require": {
+    "ext-json": "*",
+    "league/oauth2-client": "^2.6"
+  },
+  "autoload": {
+    "psr-4": {
+      "DifferentTechnology\\AzureAdBe\\": "Classes/"
+    }
+  },
+  "extra": {
+    "typo3/cms": {
+      "extension-key": "azure_ad_be"
+    }
+  }
+}
