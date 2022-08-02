@@ -176,6 +176,10 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
 
     private function getOAuthProvider(string $returnUrl): GenericProvider
     {
+        $scopes = ['User.Read', 'profile', 'openid', 'email'];
+        if(isset($GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['azure_ad_be']['groups'])) {
+            $scopes[] = 'Directory.Read.All';
+        }
         return new GenericProvider([
             'clientId' => $_ENV['TYPO3_AZURE_AD_BE_CLIENT_ID'],
             'clientSecret' => $_ENV['TYPO3_AZURE_AD_BE_CLIENT_SECRET'],
@@ -183,7 +187,7 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
             'urlAuthorize' => $_ENV['TYPO3_AZURE_AD_BE_URL_AUTHORIZE'],
             'urlAccessToken' => $_ENV['TYPO3_AZURE_AD_BE_URL_ACCESS_TOKEN'],
             'urlResourceOwnerDetails' => '',
-            'scopes' => 'User.Read profile openid email',
+            'scopes' => implode(' ', $scopes),
         ]);
     }
 
@@ -275,6 +279,23 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
             $userFields['password'] = $this->generateHashedPassword();
             $userFields['admin'] = 0;
             $userFields['crdate'] = $GLOBALS['EXEC_TIME'];
+
+            $EXTCONF = $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['azure_ad_be'];
+            if(isset($EXTCONF['groups']) && is_array($EXTCONF['groups'])) {
+                $request  = $this->oAuthProvider->getAuthenticatedRequest(
+                    'get',
+                    'https://graph.microsoft.com/v1.0/me/memberOf',
+                    $this->accessToken,
+                    []
+                );
+                $groups = $this->oAuthProvider->getParsedResponse($request);
+                foreach($groups['value'] as $group) {
+                    if(isset($EXTCONF['groups'][$group['displayName']])) {
+                        $userFields = array_merge($userFields, $EXTCONF['groups'][$group['displayName']]);
+                    }
+                }
+            }
+
             $databaseConnection->insert($this->authenticationInformation['db_user']['table'], $userFields);
         } else {
             $databaseConnection->update(
