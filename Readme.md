@@ -31,3 +31,11 @@ $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['azure_ad_be']['groups'] = [
 	]
 ];
 ```
+
+### Disable TYPO3 login
+
+If you want to disable logging in via username and password, add the following to your `ext_localconf.php`
+
+```php
+unset($GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['backend']['loginProviders'][1433416747]);
+```
