@@ -47,6 +47,11 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
     protected AccessTokenInterface $accessToken;
 
     /**
+     * @var GenericProvider
+     */
+    protected GenericProvider $oAuthProvider;
+
+    /**
      * Checks if service is available. In this case only in BE-Context
      * @return bool TRUE if service is available
      */
@@ -87,13 +92,13 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
         if (empty($loginData['uident'])) {
             $this->initializeSession();
             $authorizationCode = GeneralUtility::_GP('code');
-            $oAuthProvider = $this->getOAuthProvider($this->getReturnURL());
+            $this->oAuthProvider = $this->getOAuthProvider($this->getReturnURL());
             if (!$authorizationCode) {
                 $email = GeneralUtility::_POST('ad_email');
-                $authorizationUrl = $oAuthProvider->getAuthorizationUrl([
+                $authorizationUrl = $this->oAuthProvider->getAuthorizationUrl([
                     'login_hint' => $email,
                 ]);
-                $_SESSION['state'] = $oAuthProvider->getState();
+                $_SESSION['state'] = $this->oAuthProvider->getState();
                 HttpUtility::redirect($authorizationUrl);
             } else {
                 $state = GeneralUtility::_GP('state');
@@ -104,12 +109,14 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
                 }
 
                 try {
-                    $this->accessToken = $oAuthProvider->getAccessToken('authorization_code', [
+                    $this->accessToken = $this->oAuthProvider->getAccessToken('authorization_code', [
                         'code' => $authorizationCode,
                     ]);
+
                 } catch (IdentityProviderException $exception) {
                     return false;
                 }
+
 
                 // The id token is a JWT token that contains information about the user
                 // It's a base64 coded string that has a header, payload and signature
