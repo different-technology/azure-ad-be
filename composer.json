@@ -3,6 +3,7 @@
   "type": "typo3-cms-extension",
   "description": "Azure Active Directory - TYPO3 Backend Login",
   "homepage": "https://different.technology/",
+  "license": "GPL-2.0-or-later",
   "require": {
     "ext-json": "*",
     "league/oauth2-client": "^2.6"
