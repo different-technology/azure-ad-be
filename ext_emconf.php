@@ -7,17 +7,11 @@ $EM_CONF[$_EXTKEY] = [
     'author' => 'different.technology',
     'author_email' => 'typo3@markus-hoelzle.de',
     'state' => 'stable',
-    'internal' => '',
-    'uploadfolder' => '0',
-    'createDirs' => '',
     'clearCacheOnLoad' => 1,
     'version' => '',
     'constraints' => [
-        'depends' => [
-        ],
-        'conflicts' => [
-        ],
-        'suggests' => [
-        ],
+        'depends' => [],
+        'conflicts' => [],
+        'suggests' => [],
     ],
 ];
