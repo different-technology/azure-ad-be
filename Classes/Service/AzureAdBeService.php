@@ -8,6 +8,7 @@ use Doctrine\DBAL\Driver\Exception;
 use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use League\OAuth2\Client\Provider\GenericProvider;
 use League\OAuth2\Client\Token\AccessTokenInterface;
+use Psr\Log\LoggerAwareTrait;
 use TYPO3\CMS\Core\Authentication\AbstractUserAuthentication;
 use TYPO3\CMS\Core\Crypto\PasswordHashing\InvalidPasswordHashException;
 use TYPO3\CMS\Core\Crypto\Random;
@@ -22,6 +23,8 @@ use TYPO3\CMS\Core\Crypto\PasswordHashing\PasswordHashFactory;
 
 class AzureAdBeService extends AbstractService implements SingletonInterface
 {
+    use LoggerAwareTrait;
+
     /**
      * Login data as passed to initAuth()
      *
@@ -114,6 +117,11 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
                     ]);
 
                 } catch (IdentityProviderException $exception) {
+                    $this->logger->error(
+                        $exception->getMessage(),
+                        (array)$exception
+                    );
+
                     return false;
                 }
 
