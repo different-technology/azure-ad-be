@@ -8,6 +8,7 @@ use Doctrine\DBAL\Driver\Exception;
 use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use League\OAuth2\Client\Provider\GenericProvider;
 use League\OAuth2\Client\Token\AccessTokenInterface;
+use Psr\Log\LoggerAwareTrait;
 use TYPO3\CMS\Core\Authentication\AbstractUserAuthentication;
 use TYPO3\CMS\Core\Crypto\PasswordHashing\InvalidPasswordHashException;
 use TYPO3\CMS\Core\Crypto\Random;
@@ -22,6 +23,8 @@ use TYPO3\CMS\Core\Crypto\PasswordHashing\PasswordHashFactory;
 
 class AzureAdBeService extends AbstractService implements SingletonInterface
 {
+    use LoggerAwareTrait;
+
     /**
      * Login data as passed to initAuth()
      *
@@ -45,6 +48,11 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
      * @var AccessTokenInterface
      */
     protected AccessTokenInterface $accessToken;
+
+    /**
+     * @var GenericProvider
+     */
+    protected GenericProvider $oAuthProvider;
 
     /**
      * Checks if service is available. In this case only in BE-Context
@@ -87,13 +95,13 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
         if (empty($loginData['uident'])) {
             $this->initializeSession();
             $authorizationCode = GeneralUtility::_GP('code');
-            $oAuthProvider = $this->getOAuthProvider($this->getReturnURL());
+            $this->oAuthProvider = $this->getOAuthProvider($this->getReturnURL());
             if (!$authorizationCode) {
                 $email = GeneralUtility::_POST('ad_email');
-                $authorizationUrl = $oAuthProvider->getAuthorizationUrl([
+                $authorizationUrl = $this->oAuthProvider->getAuthorizationUrl([
                     'login_hint' => $email,
                 ]);
-                $_SESSION['state'] = $oAuthProvider->getState();
+                $_SESSION['state'] = $this->oAuthProvider->getState();
                 HttpUtility::redirect($authorizationUrl);
             } else {
                 $state = GeneralUtility::_GP('state');
@@ -104,12 +112,19 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
                 }
 
                 try {
-                    $this->accessToken = $oAuthProvider->getAccessToken('authorization_code', [
+                    $this->accessToken = $this->oAuthProvider->getAccessToken('authorization_code', [
                         'code' => $authorizationCode,
                     ]);
+
                 } catch (IdentityProviderException $exception) {
+                    $this->logger->error(
+                        $exception->getMessage(),
+                        (array)$exception
+                    );
+
                     return false;
                 }
+
 
                 // The id token is a JWT token that contains information about the user
                 // It's a base64 coded string that has a header, payload and signature
@@ -169,6 +184,10 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
 
     private function getOAuthProvider(string $returnUrl): GenericProvider
     {
+        $scopes = ['User.Read', 'profile', 'openid', 'email'];
+        if(isset($GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['azure_ad_be']['groups'])) {
+            $scopes[] = 'Directory.Read.All';
+        }
         return new GenericProvider([
             'clientId' => $_ENV['TYPO3_AZURE_AD_BE_CLIENT_ID'],
             'clientSecret' => $_ENV['TYPO3_AZURE_AD_BE_CLIENT_SECRET'],
@@ -176,7 +195,7 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
             'urlAuthorize' => $_ENV['TYPO3_AZURE_AD_BE_URL_AUTHORIZE'],
             'urlAccessToken' => $_ENV['TYPO3_AZURE_AD_BE_URL_ACCESS_TOKEN'],
             'urlResourceOwnerDetails' => '',
-            'scopes' => 'User.Read profile openid email',
+            'scopes' => implode(' ', $scopes),
         ]);
     }
 
@@ -268,6 +287,23 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
             $userFields['password'] = $this->generateHashedPassword();
             $userFields['admin'] = 0;
             $userFields['crdate'] = $GLOBALS['EXEC_TIME'];
+
+            $EXTCONF = $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['azure_ad_be'];
+            if(isset($EXTCONF['groups']) && is_array($EXTCONF['groups'])) {
+                $request  = $this->oAuthProvider->getAuthenticatedRequest(
+                    'get',
+                    'https://graph.microsoft.com/v1.0/me/memberOf',
+                    $this->accessToken,
+                    []
+                );
+                $groups = $this->oAuthProvider->getParsedResponse($request);
+                foreach($groups['value'] as $group) {
+                    if(isset($EXTCONF['groups'][$group['displayName']])) {
+                        $userFields = array_merge($userFields, $EXTCONF['groups'][$group['displayName']]);
+                    }
+                }
+            }
+
             $databaseConnection->insert($this->authenticationInformation['db_user']['table'], $userFields);
         } else {
             $databaseConnection->update(
