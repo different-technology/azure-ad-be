@@ -88,6 +88,7 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
      * @param array $loginData Credentials that are submitted and potentially modified by other services
      * @param string $passwordTransmissionStrategy Keyword of how the password has been hashed or encrypted before submission
      * @return bool
+     * @throws \Exception
      */
     public function processLoginData(array &$loginData, string $passwordTransmissionStrategy): bool
     {
@@ -117,12 +118,23 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
                     ]);
 
                 } catch (IdentityProviderException $exception) {
+                    if ($exception->getMessage() === 'invalid_client') {
+                        $exception = new \Exception(
+                            '"invalid_client" - You may have to refresh your client secret. ' .
+                            'Please visit ' .
+                            'https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Credentials/appId/' .
+                            $_ENV['TYPO3_AZURE_AD_BE_CLIENT_ID'],
+                            1714651325,
+                            $exception
+                        );
+                    }
+
                     $this->logger->error(
                         $exception->getMessage(),
                         (array)$exception
                     );
 
-                    return false;
+                    throw $exception;
                 }
 
 
@@ -137,7 +149,7 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
                 $emailAddress = $jsonAccessTokenPayload['preferred_username'] ?? null;
 
                 if ($emailAddress === null) {
-                    return false;
+                    throw new \Exception('No email address in Entra ID profile', 1714651326);
                 }
 
                 $this->loginIdentifier = strtolower($emailAddress);
