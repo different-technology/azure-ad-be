@@ -1,4 +1,5 @@
-# Azure Active Directory - TYPO3 Backend Login
+# Microsoft Entra ID - TYPO3 Backend Login
+Former title: Azure Active Directory - TYPO3 Backend Login
 
 ## Setup
 
@@ -13,7 +14,7 @@ TYPO3_AZURE_AD_BE_URL_ACCESS_TOKEN=https://login.microsoftonline.com/<see-your-e
 
 ### Group permissions
 
-You may wish to affect the users permissions or properties depending on which Azure AD group they are in.
+You may wish to affect the users permissions or properties depending on which Entra ID / Azure AD group they are in.
 
 Ensure your application has `Directory.Read.All` permissions.
 

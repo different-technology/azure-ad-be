@@ -1,7 +1,7 @@
 {
   "name": "different-technology/azure-ad-be",
   "type": "typo3-cms-extension",
-  "description": "Azure Active Directory - TYPO3 Backend Login",
+  "description": "Microsoft Entra ID - TYPO3 Backend Login",
   "homepage": "https://different.technology/",
   "license": "GPL-2.0-or-later",
   "require": {
