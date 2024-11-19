@@ -7,7 +7,7 @@ defined('TYPO3') or die();
     $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['backend']['loginProviders'][1650912385] = [
         'provider' => \DifferentTechnology\AzureAdBe\LoginProvider\ActiveDirectoryLoginProvider::class,
         'sorting' => 100,
-        'icon-class' => 'fa-key',
+        'iconIdentifier' => 'actions-key',
         'label' => 'LLL:EXT:azure_ad_be/Resources/Private/Language/locallang.xlf:login.link'
     ];
 

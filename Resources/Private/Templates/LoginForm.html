@@ -1,3 +1,4 @@
+{namespace core = TYPO3\CMS\Core\ViewHelpers}
 <f:layout name="Login" />
 
 <f:section name="loginFormFields">
@@ -5,7 +6,7 @@
     <div class="input-group">
       <input type="text" id="ad_email" name="ad_email" autofocus="autofocus" placeholder="Email" class="form-control input-login t3js-clearable t3js-login-openid-field" />
       <div class="input-group-addon">
-        <span class="fa fa-envelope"></span>
+        <core:icon identifier="actions-envelope" size="small" />
       </div>
     </div>
   </div>

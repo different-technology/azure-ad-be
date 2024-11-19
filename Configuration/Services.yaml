@@ -1,0 +1,17 @@
+services:
+  _defaults:
+    autowire: true
+    autoconfigure: true
+    public: false
+
+  DifferentTechnology\AzureAdBe\Service\AzureAdBeService:
+    public: true
+    calls:
+      - method: 'injectResponseFactory'
+        arguments:
+          $responseFactory: '@Psr\Http\Message\ResponseFactoryInterface'
+    tags:
+      - name: event.listener
+        identifier: 'ext-AzureAdBe/BeforeRequestTokenProcessedEvent'
+        method: 'handleEvent'
+        event: TYPO3\CMS\Core\Authentication\Event\BeforeRequestTokenProcessedEvent

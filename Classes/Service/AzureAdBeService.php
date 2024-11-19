@@ -8,78 +8,39 @@ use Doctrine\DBAL\Driver\Exception;
 use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use League\OAuth2\Client\Provider\GenericProvider;
 use League\OAuth2\Client\Token\AccessTokenInterface;
+use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Log\LoggerAwareTrait;
-use TYPO3\CMS\Core\Authentication\AbstractUserAuthentication;
+use TYPO3\CMS\Core\Authentication\AbstractAuthenticationService;
+use TYPO3\CMS\Core\Authentication\Event\BeforeRequestTokenProcessedEvent;
 use TYPO3\CMS\Core\Crypto\PasswordHashing\InvalidPasswordHashException;
+use TYPO3\CMS\Core\Crypto\PasswordHashing\PasswordHashFactory;
 use TYPO3\CMS\Core\Crypto\Random;
 use TYPO3\CMS\Core\Database\Connection;
 use TYPO3\CMS\Core\Database\ConnectionPool;
+use TYPO3\CMS\Core\Http\PropagateResponseException;
+use TYPO3\CMS\Core\Security\RequestToken;
 use TYPO3\CMS\Core\Service\AbstractService;
 use TYPO3\CMS\Core\SingletonInterface;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
-use TYPO3\CMS\Core\Utility\HttpUtility;
 use TYPO3\CMS\Extbase\Configuration\ConfigurationManager;
-use TYPO3\CMS\Core\Crypto\PasswordHashing\PasswordHashFactory;
 
-class AzureAdBeService extends AbstractService implements SingletonInterface
+class AzureAdBeService extends AbstractAuthenticationService implements SingletonInterface
 {
     use LoggerAwareTrait;
-
-    /**
-     * Login data as passed to initAuth()
-     *
-     * @var array
-     */
-    protected array $loginData = [];
-
-    /**
-     * Additional authentication information provided by AbstractUserAuthentication.
-     * We use it to decide what database table contains user records.
-     *
-     * @var array
-     */
-    protected array $authenticationInformation = [];
 
     protected string $loginIdentifier = '';
 
     protected string $userName = '';
 
-    /**
-     * @var AccessTokenInterface
-     */
     protected AccessTokenInterface $accessToken;
 
-    /**
-     * @var GenericProvider
-     */
     protected GenericProvider $oAuthProvider;
 
-    /**
-     * Checks if service is available. In this case only in BE-Context
-     * @return bool TRUE if service is available
-     */
-    public function init(): bool
-    {
-        return (TYPO3_MODE === 'BE') && parent::init();
-    }
+    protected ResponseFactoryInterface $responseFactory;
 
-    /**
-     * Initializes authentication for this service.
-     *
-     * @param string $subType Subtype for authentication (either "getUserFE" or "getUserBE")
-     * @param array $loginData Login data submitted by user and preprocessed by AbstractUserAuthentication
-     * @param array $authenticationInformation Additional TYPO3 information for authentication services (unused here)
-     * @param AbstractUserAuthentication $parentObject Calling object
-     * @return void
-     */
-    public function initAuth(
-        string $subType,
-        array $loginData,
-        array $authenticationInformation,
-        AbstractUserAuthentication $parentObject
-    ) {
-        $this->loginData = $loginData;
-        $this->authenticationInformation = $authenticationInformation;
+    public function injectResponseFactory(ResponseFactoryInterface $responseFactory)
+    {
+        $this->responseFactory = $responseFactory;
     }
 
     /**
@@ -95,17 +56,20 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
         // Pre-process the login only if no password has been submitted
         if (empty($loginData['uident'])) {
             $this->initializeSession();
-            $authorizationCode = GeneralUtility::_GP('code');
+            $authorizationCode = $_GET['code']; // no request available at this point
             $this->oAuthProvider = $this->getOAuthProvider($this->getReturnURL());
             if (!$authorizationCode) {
-                $email = GeneralUtility::_POST('ad_email');
+                $email = $_POST['ad_email']; // no request available at this point
                 $authorizationUrl = $this->oAuthProvider->getAuthorizationUrl([
                     'login_hint' => $email,
                 ]);
                 $_SESSION['state'] = $this->oAuthProvider->getState();
-                HttpUtility::redirect($authorizationUrl);
+                $response = $this->responseFactory
+                    ->createResponse(303)
+                    ->withAddedHeader('location', $authorizationUrl);
+                throw new PropagateResponseException($response);
             } else {
-                $state = GeneralUtility::_GP('state');
+                $state = $_GET['state']; // no request available at this point
 
                 if (!$state || $state !== $_SESSION['state']) {
                     $this->destroySession();
@@ -190,7 +154,7 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
         // It is essential for BE user authentication.
 
         /** @var ConfigurationManager $configurationManager */
-        $returnURL = rtrim(GeneralUtility::getIndpEnv('TYPO3_SITE_URL'), '/') . '/' . TYPO3_mainDir . '?login_status=login';
+        $returnURL = rtrim(GeneralUtility::getIndpEnv('TYPO3_SITE_URL'), '/') . '/typo3/?login_status=login';
         return GeneralUtility::locationHeaderUrl($returnURL);
     }
 
@@ -223,7 +187,7 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
      */
     public function getUser()
     {
-        if ($this->loginData['status'] !== 'login' || $this->loginIdentifier === '') {
+        if ($this->login['status'] !== 'login' || $this->loginIdentifier === '') {
             return null;
         }
         $user = $this->getUserRecord();
@@ -261,11 +225,11 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
     protected function getUserRecord()
     {
         $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
-            ->getQueryBuilderForTable($this->authenticationInformation['db_user']['table']);
+            ->getQueryBuilderForTable($this->authInfo['db_user']['table']);
         $queryBuilder->getRestrictions()->removeAll();
         return $queryBuilder
             ->select('*')
-            ->from($this->authenticationInformation['db_user']['table'])
+            ->from($this->authInfo['db_user']['table'])
             ->where(
                 $queryBuilder->expr()->eq(
                     'username',
@@ -274,8 +238,8 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
                         Connection::PARAM_STR
                     )
                 ),
-                $this->authenticationInformation['db_user']['check_pid_clause'],
-                $this->authenticationInformation['db_user']['enable_clause']
+                $this->authInfo['db_user']['check_pid_clause'],
+                $this->authInfo['db_user']['enable_clause']
             )
             ->execute()
             ->fetchAssociative();
@@ -291,7 +255,7 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
             'tstamp' => $GLOBALS['EXEC_TIME'],
         ];
         $databaseConnection = GeneralUtility::makeInstance(ConnectionPool::class)
-            ->getConnectionForTable($this->authenticationInformation['db_user']['table']);
+            ->getConnectionForTable($this->authInfo['db_user']['table']);
 
         if ($job === 'insert') {
             $userFields['username'] = $this->loginIdentifier;
@@ -316,10 +280,10 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
                 }
             }
 
-            $databaseConnection->insert($this->authenticationInformation['db_user']['table'], $userFields);
+            $databaseConnection->insert($this->authInfo['db_user']['table'], $userFields);
         } else {
             $databaseConnection->update(
-                $this->authenticationInformation['db_user']['table'],
+                $this->authInfo['db_user']['table'],
                 $userFields,
                 ['username' => $this->loginIdentifier]
             );
@@ -338,4 +302,33 @@ class AzureAdBeService extends AbstractService implements SingletonInterface
         return $saltFactory->getHashedPassword($password);
     }
 
+    /**
+     * EventListener (Hook) to validate the SSO redirected URL
+     *
+     * @param BeforeRequestTokenProcessedEvent $event
+     * @return void
+     */
+    public function handleEvent(BeforeRequestTokenProcessedEvent $event)
+    {
+        $requestToken = $event->getRequestToken();
+        // fine, there is a valid request-token
+        if ($requestToken instanceof RequestToken) {
+            return;
+        }
+
+        // check if login request is a valid URL
+        $params = $event->getRequest()->getQueryParams();
+        if (
+            count($params) === 4
+            && $params['login_status'] === 'login'
+            && !empty($params['code'])
+            && !empty($params['state'])
+            && !empty($params['session_state'])
+        ) {
+            // set URL token as valid
+            $event->setRequestToken(
+                RequestToken::create('core/user-auth/' . strtolower($event->getUser()->loginType))
+            );
+        }
+    }
 }
