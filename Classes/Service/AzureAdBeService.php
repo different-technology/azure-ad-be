@@ -19,7 +19,6 @@ use TYPO3\CMS\Core\Database\Connection;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Http\PropagateResponseException;
 use TYPO3\CMS\Core\Security\RequestToken;
-use TYPO3\CMS\Core\Service\AbstractService;
 use TYPO3\CMS\Core\SingletonInterface;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Configuration\ConfigurationManager;
@@ -38,7 +37,7 @@ class AzureAdBeService extends AbstractAuthenticationService implements Singleto
 
     protected ResponseFactoryInterface $responseFactory;
 
-    public function injectResponseFactory(ResponseFactoryInterface $responseFactory)
+    public function injectResponseFactory(ResponseFactoryInterface $responseFactory): void
     {
         $this->responseFactory = $responseFactory;
     }
@@ -124,14 +123,14 @@ class AzureAdBeService extends AbstractAuthenticationService implements Singleto
         return false;
     }
 
-    private function initializeSession()
+    private function initializeSession(): void
     {
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
     }
 
-    private function destroySession()
+    private function destroySession(): void
     {
         if (session_status() !== PHP_SESSION_NONE) {
             session_destroy();
@@ -220,9 +219,9 @@ class AzureAdBeService extends AbstractAuthenticationService implements Singleto
 
     /**
      * @return false|array
-     * @throws Exception
+     * @throws \Doctrine\DBAL\Exception
      */
-    protected function getUserRecord()
+    protected function getUserRecord(): false|array
     {
         $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
             ->getQueryBuilderForTable($this->authInfo['db_user']['table']);
@@ -241,14 +240,15 @@ class AzureAdBeService extends AbstractAuthenticationService implements Singleto
                 $this->authInfo['db_user']['check_pid_clause'],
                 $this->authInfo['db_user']['enable_clause']
             )
-            ->execute()
+            ->executeQuery()
             ->fetchAssociative();
     }
 
     /**
      * @throws InvalidPasswordHashException
+     * @throws IdentityProviderException
      */
-    private function createOrUpdateUserRecord(string $job)
+    private function createOrUpdateUserRecord(string $job): void
     {
         $userFields = [
             'realName' => $this->userName ?? '',
@@ -308,7 +308,7 @@ class AzureAdBeService extends AbstractAuthenticationService implements Singleto
      * @param BeforeRequestTokenProcessedEvent $event
      * @return void
      */
-    public function handleEvent(BeforeRequestTokenProcessedEvent $event)
+    public function handleEvent(BeforeRequestTokenProcessedEvent $event): void
     {
         $requestToken = $event->getRequestToken();
         // fine, there is a valid request-token
